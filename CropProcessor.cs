@@ -25,9 +25,9 @@ namespace VideoCropperPage
                     cropParams = $"{hwDownArgs}{cropParams}{hwUpArgs}";
                     break;
             }
-            await StartFfmpegTranscodingProcessDefaultQuality([fileName], GetOutputName(fileName), $"-vf \"{cropParams}\"", (progress, _, _, _) =>
+            await StartFfmpegTranscodingProcessDefaultQuality([fileName], GetOutputName(fileName), $"-vf \"{cropParams}\"", (progress, _, _, _, fps, estimatedTimeRemaining) =>
             {
-                IncrementProgress(progress);
+                IncrementProgress(progress, fps, estimatedTimeRemaining);
             });
             if (HasBeenKilled()) return;
             AllDone();
@@ -43,10 +43,10 @@ namespace VideoCropperPage
             return outputFile;
         }
 
-        private void IncrementProgress(double progress)
+        private void IncrementProgress(double progress, double fps, TimeSpan estimatedTimeRemaining)
         {
             progressPrimary.Report(progress);
-            centerTextPrimary.Report($"{Math.Round(progress, 2)} %");
+            centerTextPrimary.Report($"{progress:F2} % · {fps:F1} fps · ETA {estimatedTimeRemaining:hh\\:mm\\:ss}");
         }
 
         private void AllDone()

@@ -15,11 +15,21 @@
     </Page.Resources>
 
     <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="400"/>
         </Grid.ColumnDefinitions>
-        <RelativePanel>
+        <Button Grid.ColumnSpan="2" HorizontalAlignment="Left" Margin="10" Click="GoBack">
+            <StackPanel Orientation="Horizontal">
+                <FontIcon Glyph="&#xE72B;" Margin="0,0,10,0" />
+                <TextBlock VerticalAlignment="Center">Go back</TextBlock>
+            </StackPanel>
+        </Button>
+        <RelativePanel Grid.Row="1">
             <Grid Name="CanvasContainer" RelativePanel.AlignTopWithPanel="True" RelativePanel.AlignRightWithPanel="True" RelativePanel.AlignLeftWithPanel="True"
                   RelativePanel.Above="VideoControls" SizeChanged="CanvasContainer_OnSizeChanged">
                 <Canvas Name="Canvas" HorizontalAlignment="Left" VerticalAlignment="Top">
@@ -50,7 +60,7 @@
                                      Processor="{x:Bind cropProcessor}" HardwareSelector="{x:Bind HardwareSelector}"
                                      OnlyPrimary="True" Padding="10"/>
         </RelativePanel>
-        <Grid Grid.Column="1" Padding="10">
+        <Grid Grid.Row="1" Grid.Column="1" Padding="10">
             <Grid.RowDefinitions>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
@@ -60,12 +70,6 @@
             <ScrollView Margin="0,0,0,10">
                 <StackPanel Spacing="10">
                     <TextBlock Name="VideoName" Style="{StaticResource TitleTextBlockStyle}"/>
-                    <Button HorizontalAlignment="Center" Click="GoBack">
-                        <StackPanel Orientation="Horizontal">
-                            <FontIcon Glyph="&#xE72B;" Margin="0,0,10,0" />
-                            <TextBlock VerticalAlignment="Center">Go back</TextBlock>
-                        </StackPanel>
-                    </Button>
                     <RelativePanel Height="150">
                         <NumberBox Name="X" Header="X" Width="140" LostFocus="X_OnTextChanged" SpinButtonPlacementMode="Compact" LargeChange="20"/>
                         <NumberBox Name="Y" Header="Y" Width="140" LostFocus="Y_OnTextChanged" RelativePanel.AlignRightWithPanel="True" SpinButtonPlacementMode="Compact" LargeChange="20"/>

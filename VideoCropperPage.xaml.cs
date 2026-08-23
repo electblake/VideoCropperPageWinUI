@@ -354,8 +354,16 @@ namespace VideoCropper
         private async void Crop(object sender, RoutedEventArgs e)
         {
             outputFile = null;
-            outputFile = await ProcessManager.StartProcess(cropProcessor.Crop(videoPath, ffmpegPath, X.Text, Y.Text,
-                XDelta.Text, YDelta.Text));
+            var playbackSession = VideoPlayer.MediaPlayer.PlaybackSession;
+            var videoScale = Math.Min(Canvas.Width / playbackSession.NaturalVideoWidth,
+                Canvas.Height / playbackSession.NaturalVideoHeight);
+            var videoLeft = (Canvas.Width - playbackSession.NaturalVideoWidth * videoScale) / 2;
+            var videoTop = (Canvas.Height - playbackSession.NaturalVideoHeight * videoScale) / 2;
+            var x = ((double.Parse(X.Text) - videoLeft) / videoScale).ToString("F0");
+            var y = ((double.Parse(Y.Text) - videoTop) / videoScale).ToString("F0");
+            var width = (double.Parse(XDelta.Text) / videoScale).ToString("F0");
+            var height = (double.Parse(YDelta.Text) / videoScale).ToString("F0");
+            outputFile = await ProcessManager.StartProcess(cropProcessor.Crop(videoPath, ffmpegPath, x, y, width, height));
         }
 
         private void GoBack(object sender, RoutedEventArgs e)
