@@ -8,26 +8,24 @@ namespace VideoCropperPage
 {
     public class CropProcessor(string ffmpegPath): Processor(ffmpegPath, new FileLogger.FileLogger("ReelBox/Crop"))
     {
-        public async Task Crop(string fileName, string ffmpegPath, string x, string y, string width, string height)
+        public async Task Crop(string fileName, string ffmpegPath, string x, string y, string width, string height,
+            bool normalizePixelAspectRatio)
         {
             progressPrimary.Report(0);
             centerTextPrimary.Report("0.0 %");
-            rightTextPrimary.Report("Cropping...");
             var cropParams = $"crop={width}:{height}:{x}:{y}";
+            if (normalizePixelAspectRatio) cropParams += ",scale=trunc(iw*sar/2)*2:ih,setsar=1";
             switch (gpuInfo?.Vendor)
             {
-                case GpuVendor.Intel:
-                    cropParams = $"vpp_qsv=cw={width}:ch={height}:cx={x}:cy={y}";
-                    break;
-                case GpuVendor.Nvidia or GpuVendor.Amd:
+                case GpuVendor.Nvidia or GpuVendor.Amd or GpuVendor.Intel:
                     var gpuPixelFormat = await GetGpuPixelFormat(fileName);
                     var (hwDownArgs, hwUpArgs) = GpuInfo.FilterParams(gpuInfo, gpuPixelFormat);
                     cropParams = $"{hwDownArgs}{cropParams}{hwUpArgs}";
                     break;
             }
-            await StartFfmpegTranscodingProcessDefaultQuality([fileName], GetOutputName(fileName), $"-vf \"{cropParams}\"", (progress, _, _, _, fps, estimatedTimeRemaining) =>
+            await StartFfmpegTranscodingProcessDefaultQuality([fileName], GetOutputName(fileName), $"-vf \"{cropParams}\"", (progress, currentTime, duration, _, fps, speed) =>
             {
-                IncrementProgress(progress, fps, estimatedTimeRemaining);
+                IncrementProgress(progress, fps, (duration - currentTime) / speed);
             });
             if (HasBeenKilled()) return;
             AllDone();
@@ -46,7 +44,8 @@ namespace VideoCropperPage
         private void IncrementProgress(double progress, double fps, TimeSpan estimatedTimeRemaining)
         {
             progressPrimary.Report(progress);
-            centerTextPrimary.Report($"{progress:F2} % · {fps:F1} fps · ETA {estimatedTimeRemaining:hh\\:mm\\:ss}");
+            centerTextPrimary.Report($"{progress:F2} % · {fps:F1} fps");
+            rightTextPrimary.Report($"ETA {estimatedTimeRemaining:hh\\:mm\\:ss}");
         }
 
         private void AllDone()
