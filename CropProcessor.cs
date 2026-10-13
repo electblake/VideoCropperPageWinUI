@@ -11,11 +11,18 @@ namespace VideoCropperPage
         public event Action<TimeSpan>? ProcessingPositionChanged;
 
         public async Task Crop(string fileName, string ffmpegPath, string x, string y, string width, string height,
-            bool normalizePixelAspectRatio)
+            bool normalizePixelAspectRatio, int quarterTurns)
         {
             progressPrimary.Report(0);
             centerTextPrimary.Report("0.0 %");
             var cropParams = $"crop={width}:{height}:{x}:{y}";
+            cropParams = quarterTurns switch
+            {
+                1 => "transpose=clock," + cropParams,
+                2 => "hflip,vflip," + cropParams,
+                3 => "transpose=cclock," + cropParams,
+                _ => cropParams
+            };
             if (normalizePixelAspectRatio) cropParams += ",scale=trunc(iw*sar/2)*2:ih,setsar=1";
             switch (gpuInfo?.Vendor)
             {
