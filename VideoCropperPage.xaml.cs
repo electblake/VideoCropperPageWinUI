@@ -106,6 +106,9 @@ namespace VideoCropper
             VideoPlayer.MediaPlayer.MediaFailed += (_, args) => App.Diagnostics.Report(
                 $"Media failure: {args.Error}; {args.ErrorMessage}", args.ExtendedErrorCode);
             var settings = VideoCropper.App.Settings;
+            NotifyWhenDoneCheckBox.IsEnabled = !AppStorage.NoProfile;
+            if (AppStorage.NoProfile)
+                ToolTipService.SetToolTip(NotifyWhenDoneCheckBox, "Windows notifications are disabled in -NoProfile mode.");
             if (settings.ContainsKey(NotifyWhenDoneSetting))
                 NotifyWhenDoneCheckBox.IsChecked = settings.Get<bool>(NotifyWhenDoneSetting);
             NotifyWhenDoneCheckBox.Checked += (_, _) => App.Settings[NotifyWhenDoneSetting] = true;
