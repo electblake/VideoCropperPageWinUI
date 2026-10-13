@@ -102,9 +102,10 @@
                                 <NumberBox Name="YDelta" Header="Height" Width="140" LostFocus="YDelta_OnTextChanged" RelativePanel.AlignRightWithPanel="True"
                                            RelativePanel.AlignBottomWithPanel="True" SpinButtonPlacementMode="Compact" LargeChange="20"/>
                             </RelativePanel>
-                            <StackPanel x:Name="RotationControls" Orientation="Horizontal" Spacing="8" IsEnabled="False">
-                                <Button Content="&#x21B6; Rotate left" Click="RotateLeft" ToolTipService.ToolTip="Rotate 90 degrees counterclockwise"/>
-                                <Button Content="&#x21B7; Rotate right" Click="RotateRight" ToolTipService.ToolTip="Rotate 90 degrees clockwise"/>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button x:Name="RotateLeftButton" IsEnabled="False" Content="&#x21B6; Rotate left" Click="RotateLeft" ToolTipService.ToolTip="Rotate 90 degrees counterclockwise"/>
+                                <Button x:Name="RotateRightButton" IsEnabled="False" Content="&#x21B7; Rotate right" Click="RotateRight" ToolTipService.ToolTip="Rotate 90 degrees clockwise"/>
+                                <Button x:Name="ResetRotationButton" IsEnabled="False" Content="Reset" Click="ResetRotation" ToolTipService.ToolTip="Reset rotation to 0 degrees" AutomationProperties.Name="Reset rotation"/>
                             </StackPanel>
                             <CheckBox Name="AspectRatioCheckBox" Content="Lock aspect ratio"
                                       Checked="AspectRatioCheckBox_OnChanged" Unchecked="AspectRatioCheckBox_OnChanged"/>

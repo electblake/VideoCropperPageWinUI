@@ -39,8 +39,9 @@ namespace VideoCropper
     {
         private DraggerResizer.DraggerResizer resizer;
         private readonly CropperModel viewModel;
-        private CropProcessor cropProcessor;
-        private RectangleGeometry mask;
+        // Set by navigation before processing controls are used.
+        private CropProcessor cropProcessor = null!;
+        private RectangleGeometry mask => (RectangleGeometry)((GeometryGroup)OverlayAndMask.Data).Children[1];
         private const string AspectRatioPresetSetting = "Crop.AspectRatioPreset";
         private const string CenterPresetSetting = "Crop.CenterPreset";
         private const string LockAspectRatioSetting = "Crop.LockAspectRatio";
@@ -54,16 +55,18 @@ namespace VideoCropper
         private readonly DispatcherTimer processingPreviewTimer = new() { Interval = TimeSpan.FromMilliseconds(500) };
         private bool pageActive;
         private ContentDialog? quitDialog;
-        private bool progressChangedByCode;
         private readonly ObservableCollection<AspectRatio> ratios = [];
         private const double IconMaxSize = 40;
-        private readonly double progressMax = 100;
         private string? outputFile;
         private string? navigateTo;
-        private string ffmpegPath, videoPath;
+        // Navigation supplies the executable path; LoadVideo selects the input.
+        private string ffmpegPath = null!;
+        private string videoPath => videoPaths[currentVideoIndex];
         private readonly List<string> videoPaths = [];
         private int currentVideoIndex;
-        private CancellationTokenSource resizeTokenSource;
+        private readonly DispatcherTimer resizeTimer = new() { Interval = TimeSpan.FromMilliseconds(500) };
+        private bool videoSizeChanged;
+        private bool applyingResize;
         private bool cropFrameInitialized;
         private int quarterTurns;
         private bool restoringCrop;
@@ -84,6 +87,7 @@ namespace VideoCropper
             resizer = new DraggerResizer.DraggerResizer();
             viewModel = new CropperModel();
             PopulateAspectRatios();
+            resizeTimer.Tick += (_, _) => ApplyPendingResize();
             VideoPlayer.SetMediaPlayer(new Windows.Media.Playback.MediaPlayer());
             processingPreviewTimer.Tick += UpdateProcessingPreviewPosition;
             VideoPlayer.MediaPlayer.MediaOpened += (player, _) =>
@@ -102,40 +106,40 @@ namespace VideoCropper
                 $"Media failure: {args.Error}; {args.ErrorMessage}", args.ExtendedErrorCode);
             var settings = VideoCropper.App.Settings;
             if (settings.ContainsKey("Crop.QuarterTurns"))
-                quarterTurns = (int)settings["Crop.QuarterTurns"];
+                quarterTurns = settings.Get<int>("Crop.QuarterTurns");
             if (settings.ContainsKey("Crop.WidthPercent"))
             {
-                savedWidthPercent = (double)settings["Crop.WidthPercent"];
-                savedHeightPercent = (double)settings["Crop.HeightPercent"];
+                savedWidthPercent = settings.Get<double>("Crop.WidthPercent");
+                savedHeightPercent = settings.Get<double>("Crop.HeightPercent");
             }
             if (settings.ContainsKey(PreviewWhileProcessingSetting))
-                PreviewWhileProcessingCheckBox.IsChecked = (bool)settings[PreviewWhileProcessingSetting];
+                PreviewWhileProcessingCheckBox.IsChecked = settings.Get<bool>(PreviewWhileProcessingSetting);
             PreviewWhileProcessingCheckBox.Checked += PreviewWhileProcessingChanged;
             PreviewWhileProcessingCheckBox.Unchecked += PreviewWhileProcessingChanged;
             if (settings.ContainsKey("Crop.AutoAdvance"))
-                AutoAdvanceCheckBox.IsChecked = (bool)settings["Crop.AutoAdvance"];
+                AutoAdvanceCheckBox.IsChecked = settings.Get<bool>("Crop.AutoAdvance");
             AutoAdvanceCheckBox.Checked += (_, _) => App.Settings["Crop.AutoAdvance"] = true;
             AutoAdvanceCheckBox.Unchecked += (_, _) => App.Settings["Crop.AutoAdvance"] = false;
             if (settings.ContainsKey("Crop.QuitWhenDone"))
-                QuitWhenDoneCheckBox.IsChecked = (bool)settings["Crop.QuitWhenDone"];
+                QuitWhenDoneCheckBox.IsChecked = settings.Get<bool>("Crop.QuitWhenDone");
             QuitWhenDoneCheckBox.Checked += (_, _) => App.Settings["Crop.QuitWhenDone"] = true;
             QuitWhenDoneCheckBox.Unchecked += (_, _) => App.Settings["Crop.QuitWhenDone"] = false;
             if (settings.ContainsKey(AspectRatioPresetSetting))
-                savedAspectRatioTitle = (string)settings[AspectRatioPresetSetting];
+                savedAspectRatioTitle = settings.Get<string>(AspectRatioPresetSetting);
             if (settings.ContainsKey(CenterPresetSetting))
-                centerPresetSelected = (bool)settings[CenterPresetSetting];
+                centerPresetSelected = settings.Get<bool>(CenterPresetSetting);
             if (settings.ContainsKey(LockAspectRatioSetting))
-                AspectRatioCheckBox.IsChecked = (bool)settings[LockAspectRatioSetting];
+                AspectRatioCheckBox.IsChecked = settings.Get<bool>(LockAspectRatioSetting);
             if (settings.ContainsKey(ZoomIntoFrameSetting))
-                ZoomIntoFrameCheckBox.IsChecked = (bool)settings[ZoomIntoFrameSetting];
+                ZoomIntoFrameCheckBox.IsChecked = settings.Get<bool>(ZoomIntoFrameSetting);
             if (settings.ContainsKey(MouseWheelZoomSetting))
-                MouseWheelZoomCheckBox.IsChecked = (bool)settings[MouseWheelZoomSetting];
+                MouseWheelZoomCheckBox.IsChecked = settings.Get<bool>(MouseWheelZoomSetting);
             if (settings.ContainsKey(NormalizePixelAspectRatioSetting))
-                NormalizePixelAspectRatioCheckBox.IsChecked = (bool)settings[NormalizePixelAspectRatioSetting];
+                NormalizePixelAspectRatioCheckBox.IsChecked = settings.Get<bool>(NormalizePixelAspectRatioSetting);
             if (settings.ContainsKey(XPercentSetting))
-                savedXPercent = (double)settings[XPercentSetting];
+                savedXPercent = settings.Get<double>(XPercentSetting);
             if (settings.ContainsKey(YPercentSetting))
-                savedYPercent = (double)settings[YPercentSetting];
+                savedYPercent = settings.Get<double>(YPercentSetting);
             viewModel.PropertyChanged += (s, args) =>
             {
                 if (args.PropertyName == nameof(CropperModel.DuringOperation))
@@ -168,6 +172,8 @@ namespace VideoCropper
         protected override void OnNavigatedFrom(NavigationEventArgs e)
         {
             pageActive = false;
+            resizeTimer.Stop();
+            videoSizeChanged = false;
             quitDialog?.Hide();
             processingPreviewTimer.Stop();
             cropProcessor.ProcessingPositionChanged -= processingPreview.Report;
@@ -208,21 +214,22 @@ namespace VideoCropper
 
         private void LoadVideo()
         {
+            resizeTimer.Stop();
+            videoSizeChanged = false;
             processingPreview.Reset();
             processingPreview.CompleteSeek();
-            videoPath = videoPaths[currentVideoIndex];
             App.Diagnostics.Log($"Loading video {currentVideoIndex + 1}/{videoPaths.Count}: {videoPath}");
             VideoName.Text = Path.GetFileName(videoPath);
             cropFrameInitialized = false;
             UpdateVideoRotation();
-            RotationControls.IsEnabled = false;
+            RotateLeftButton.IsEnabled = RotateRightButton.IsEnabled = ResetRotationButton.IsEnabled = false;
             VideoPlayer.Source = MediaSource.CreateFromUri(new Uri(Processor.GetSafePath(videoPath)));
             UpdateVideoNavigation();
         }
 
         private void UpdateVideoNavigation()
         {
-            RotationControls.IsEnabled = cropFrameInitialized && !viewModel.DuringOperation;
+            RotateLeftButton.IsEnabled = RotateRightButton.IsEnabled = ResetRotationButton.IsEnabled = cropFrameInitialized && !viewModel.DuringOperation;
             VideoPosition.Text = $"{currentVideoIndex + 1}/{videoPaths.Count}";
             VideoNavigation.Visibility = videoPaths.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
             PreviousVideoButton.IsEnabled = !viewModel.DuringOperation && currentVideoIndex > 0;
@@ -320,7 +327,7 @@ namespace VideoCropper
             CoordinatesChanged(new Rect(resizer.GetElementLeft(CropFrame), resizer.GetElementTop(CropFrame), CropFrame.Width, CropFrame.Height));
         }
 
-        private void AspectRatioCheckBox_OnChanged(object sender, RoutedEventArgs e)
+        private void AspectRatioCheckBox_OnChanged(object sender, RoutedEventArgs? e)
         {
             var checkbox = (CheckBox)sender;
             VideoCropper.App.Settings[LockAspectRatioSetting] = checkbox.IsChecked == true;
@@ -352,12 +359,24 @@ namespace VideoCropper
         private void VideoPlayer_OnSizeChanged(object sender, SizeChangedEventArgs e)
         {
             if (e.NewSize.Width == 0 || e.NewSize.Height == 0) return;
+            if (cropFrameInitialized)
+            {
+                videoSizeChanged = true;
+                ScheduleResize();
+                return;
+            }
             UpdateVideoRotation();
             InitializeCropFrame(quarterTurns % 2 == 0 ? e.NewSize : new Size(e.NewSize.Height, e.NewSize.Width));
         }
 
         private void RotateLeft(object sender, RoutedEventArgs e) => RotateVideo(-1);
         private void RotateRight(object sender, RoutedEventArgs e) => RotateVideo(1);
+
+        private void ResetRotation(object sender, RoutedEventArgs e)
+        {
+            while (quarterTurns != 0)
+                RotateVideo(quarterTurns == 3 ? 1 : -1);
+        }
 
         private void UpdateVideoRotation()
         {
@@ -375,6 +394,7 @@ namespace VideoCropper
 
         private void RotateVideo(int direction)
         {
+            ApplyPendingResize();
             var left = resizer.GetElementLeft(CropFrame);
             var top = resizer.GetElementTop(CropFrame);
             var rotated = direction > 0
@@ -410,7 +430,7 @@ namespace VideoCropper
             Microsoft.UI.Xaml.Controls.Canvas.SetLeft(CropFrame, 0);
             Microsoft.UI.Xaml.Controls.Canvas.SetTop(CropFrame, 0);
             var geometryGroup = new GeometryGroup { FillRule = FillRule.EvenOdd };
-            mask = new RectangleGeometry
+            var mask = new RectangleGeometry
             {
                 Rect = new Rect(0, 0, videoSize.Width, videoSize.Height)
             };
@@ -463,7 +483,7 @@ namespace VideoCropper
             restoringCrop = false;
             CoordinatesChanged();
 
-            RotationControls.IsEnabled = !viewModel.DuringOperation;
+            RotateLeftButton.IsEnabled = RotateRightButton.IsEnabled = ResetRotationButton.IsEnabled = !viewModel.DuringOperation;
             if (zoomIntoFrame) FocusCropFrame();
             else FitToView();
         }
@@ -515,6 +535,13 @@ namespace VideoCropper
         private void AnimateTransform(double panX, double panY, double zoom)
         {
             transformStoryboard?.Stop();
+            if (applyingResize)
+            {
+                PanTransform.X = panX;
+                PanTransform.Y = panY;
+                ZoomTransform.ScaleX = ZoomTransform.ScaleY = zoom;
+                return;
+            }
             transformStoryboard = new Storyboard(); //Animates PanTransform.X/Y and ZoomTransform.ScaleX/Y
             const double animDuration = 500;
 
@@ -602,8 +629,35 @@ namespace VideoCropper
                 Rect = new Rect(0, 0, CanvasContainer.ActualWidth, CanvasContainer.ActualHeight)
             };
             if (!cropFrameInitialized) return;
-            if(zoomIntoFrame) FocusCropFrame();
+            ScheduleResize();
+        }
+
+        private void ScheduleResize()
+        {
+            transformStoryboard?.Stop();
+            resizeTimer.Stop();
+            resizeTimer.Start();
+        }
+
+        private void ApplyPendingResize()
+        {
+            var pending = resizeTimer.IsEnabled;
+            resizeTimer.Stop();
+            if (!pending || !pageActive || !cropFrameInitialized) return;
+            if (CanvasContainer.ActualWidth == 0 || CanvasContainer.ActualHeight == 0 ||
+                VideoPlayer.ActualWidth == 0 || VideoPlayer.ActualHeight == 0) return;
+            applyingResize = true;
+            if (videoSizeChanged)
+            {
+                videoSizeChanged = false;
+                UpdateVideoRotation();
+                InitializeCropFrame(quarterTurns % 2 == 0
+                    ? new Size(VideoPlayer.ActualWidth, VideoPlayer.ActualHeight)
+                    : new Size(VideoPlayer.ActualHeight, VideoPlayer.ActualWidth));
+            }
+            else if (zoomIntoFrame) FocusCropFrame();
             else FitToView();
+            applyingResize = false;
         }
 
         private void CanvasContainer_OnPointerWheelChanged(object sender, PointerRoutedEventArgs e)
@@ -645,7 +699,7 @@ namespace VideoCropper
             VideoCropper.App.Settings[MouseWheelZoomSetting] = MouseWheelZoomCheckBox.IsChecked == true;
         }
 
-        private void NormalizePixelAspectRatioCheckBox_OnChanged(object sender, RoutedEventArgs e)
+        private void NormalizePixelAspectRatioCheckBox_OnChanged(object sender, RoutedEventArgs? e)
         {
             VideoCropper.App.Settings[NormalizePixelAspectRatioSetting] =
                 NormalizePixelAspectRatioCheckBox.IsChecked == true;
@@ -653,6 +707,7 @@ namespace VideoCropper
 
         private async void Crop(object sender, RoutedEventArgs e)
         {
+            ApplyPendingResize();
             processingPreview.Reset();
             App.Diagnostics.Log($"Crop requested: input={videoPath}; X={X.Text}; Y={Y.Text}; width={XDelta.Text}; height={YDelta.Text}");
             outputFile = null;
@@ -740,7 +795,7 @@ namespace VideoCropper
     class AspectRatio : INotifyPropertyChanged
     {
         private bool isSelected;
-        public string Title { get; set; }
+        public required string Title { get; set; }
         public double Width { get; set; }
         public double Height { get; set; }
         public bool IsSelected
@@ -758,8 +813,8 @@ namespace VideoCropper
     }
 
     public class CropperProps{
-        public string FfmpegPath { get; set; }
-        public List<string> VideoPaths { get; set; }
+        public required string FfmpegPath { get; set; }
+        public required List<string> VideoPaths { get; set; }
         public string? TypeToNavigateTo { get; set; }
     }
 }
