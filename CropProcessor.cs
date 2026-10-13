@@ -15,6 +15,8 @@ namespace VideoCropperPage
             bool normalizePixelAspectRatio, int quarterTurns, TimeSpan inPosition, TimeSpan outPosition)
         {
             Succeeded = false;
+            StopRequested = false;
+            gracefulStopEnabled = false;
             var range = new CropTimeRange(inPosition, outPosition);
             ProcessingPositionChanged?.Invoke(range.In);
             progressPrimary.Report(0);
@@ -36,6 +38,7 @@ namespace VideoCropperPage
                     cropParams = $"{hwDownArgs}{cropParams}{hwUpArgs}";
                     break;
             }
+            gracefulStopEnabled = true;
             var succeeded = await StartFfmpegTranscodingProcessDefaultQuality([fileName], GetOutputName(fileName),
                 range.InputArguments, $"{range.OutputArguments} -vf \"{cropParams}\"", (_, currentTime, _, _, fps, speed) =>
             {
@@ -47,7 +50,7 @@ namespace VideoCropperPage
             Succeeded = succeeded;
             if (!succeeded)
                 VideoCropper.App.Diagnostics.Report("FFmpeg crop failed", $"Input: {fileName}; output: {outputFile}; see session log for command and exit code");
-            AllDone();
+            if (!StopRequested && succeeded) AllDone();
         }
 
         private string GetOutputName(string path)

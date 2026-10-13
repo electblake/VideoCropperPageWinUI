@@ -720,7 +720,7 @@ namespace VideoCropper
             App.Diagnostics.Log($"Crop requested: input={videoPath}; X={X.Text}; Y={Y.Text}; width={XDelta.Text}; height={YDelta.Text}");
             outputFile = null;
             outputFile = await ProcessManager.StartProcess(CropVideo());
-            if (!pageActive || !viewModel.AfterOperation || outputFile == null) return;
+            if (!pageActive || !viewModel.AfterOperation || outputFile == null || cropProcessor.StopRequested) return;
             if (NotifyWhenDoneCheckBox.IsChecked == true && cropProcessor.Succeeded)
                 App.NotifyCropCompleted(outputFile);
             if (AutoAdvanceCheckBox.IsChecked == true && currentVideoIndex < videoPaths.Count - 1)
