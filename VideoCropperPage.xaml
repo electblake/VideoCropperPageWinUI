@@ -42,6 +42,8 @@
                        Style="{StaticResource SubtitleTextBlockStyle}" TextTrimming="CharacterEllipsis"
                        TextWrapping="NoWrap" ToolTipService.ToolTip="{Binding Text, ElementName=VideoName}"/>
             <StackPanel x:Name="VideoNavigation" Grid.Column="2" Orientation="Horizontal" Spacing="8">
+                <TextBlock x:Name="VideoPosition" VerticalAlignment="Center"
+                           ToolTipService.ToolTip="Current video / total videos"/>
                 <Button x:Name="PreviousVideoButton" Click="PreviousVideo" ToolTipService.ToolTip="Previous video">
                     <FontIcon Glyph="&#xE76B;"/>
                 </Button>
@@ -93,8 +95,8 @@
                     <ScrollView Background="{StaticResource PanelBackgroundBrush}">
                         <StackPanel Spacing="10" Padding="0,10,0,0">
                             <RelativePanel Height="150">
-                                <NumberBox Name="X" Header="X" Width="140" LostFocus="X_OnTextChanged" SpinButtonPlacementMode="Compact" LargeChange="20"/>
-                                <NumberBox Name="Y" Header="Y" Width="140" LostFocus="Y_OnTextChanged" RelativePanel.AlignRightWithPanel="True" SpinButtonPlacementMode="Compact" LargeChange="20"/>
+                                <NumberBox Name="X" Header="X (%)" Width="140" LostFocus="X_OnTextChanged" SpinButtonPlacementMode="Compact" LargeChange="20"/>
+                                <NumberBox Name="Y" Header="Y (%)" Width="140" LostFocus="Y_OnTextChanged" RelativePanel.AlignRightWithPanel="True" SpinButtonPlacementMode="Compact" LargeChange="20"/>
                                 <NumberBox Name="XDelta" Header="Width" Width="140" LostFocus="XDelta_OnTextChanged" RelativePanel.AlignBottomWithPanel="True"
                                            SpinButtonPlacementMode="Compact" LargeChange="20"/>
                                 <NumberBox Name="YDelta" Header="Height" Width="140" LostFocus="YDelta_OnTextChanged" RelativePanel.AlignRightWithPanel="True"
@@ -145,6 +147,8 @@
                 <TabViewItem Header="Settings" IsClosable="False">
                     <ScrollView Background="{StaticResource PanelBackgroundBrush}">
                         <StackPanel Spacing="10" Padding="0,10,0,0">
+                            <CheckBox x:Name="PreviewWhileProcessingCheckBox" Content="Preview while processing" IsChecked="True"
+                                      ToolTipService.ToolTip="Follow crop progress in the source video, at most twice per second."/>
                             <CheckBox x:Name="MouseWheelZoomCheckBox" Content="Use mouse scroll wheel to zoom"
                                       Checked="MouseWheelZoomCheckBox_OnChanged" Unchecked="MouseWheelZoomCheckBox_OnChanged"/>
                             <CheckBox x:Name="NormalizePixelAspectRatioCheckBox" Content="Convert output to square pixels (SAR 1:1)"
@@ -168,15 +172,8 @@
                         <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" HorizontalTextAlignment="Center">Crop!</TextBlock>
                     </StackPanel>
                 </Button>
-                <Button Grid.Column="1" HorizontalAlignment="Stretch" Click="BatchCrop"
-                        IsEnabled="{x:Bind viewModel.DuringOperation, Mode=OneWay, Converter={StaticResource BoolNegationConverter}}">
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <Viewbox MaxWidth="30">
-                            <SymbolIcon Symbol="Crop" />
-                        </Viewbox>
-                        <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" HorizontalTextAlignment="Center">Batch crop</TextBlock>
-                    </StackPanel>
-                </Button>
+                <CheckBox x:Name="AutoAdvanceCheckBox" Grid.Column="1" VerticalAlignment="Center"
+                          Content="Load next video after cropping"/>
             </Grid>
         </Grid>
     </Grid>

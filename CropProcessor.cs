@@ -6,8 +6,10 @@ using WinUIShared.Helpers;
 
 namespace VideoCropperPage
 {
-    public class CropProcessor(string ffmpegPath): Processor(ffmpegPath, new FileLogger.FileLogger("ReelBox/Crop"))
+    public class CropProcessor(string ffmpegPath): Processor(ffmpegPath, VideoCropper.App.Diagnostics)
     {
+        public event Action<TimeSpan>? ProcessingPositionChanged;
+
         public async Task Crop(string fileName, string ffmpegPath, string x, string y, string width, string height,
             bool normalizePixelAspectRatio)
         {
@@ -23,11 +25,14 @@ namespace VideoCropperPage
                     cropParams = $"{hwDownArgs}{cropParams}{hwUpArgs}";
                     break;
             }
-            await StartFfmpegTranscodingProcessDefaultQuality([fileName], GetOutputName(fileName), $"-vf \"{cropParams}\"", (progress, currentTime, duration, _, fps, speed) =>
+            var succeeded = await StartFfmpegTranscodingProcessDefaultQuality([fileName], GetOutputName(fileName), $"-vf \"{cropParams}\"", (progress, currentTime, duration, _, fps, speed) =>
             {
                 IncrementProgress(progress, fps, (duration - currentTime) / speed);
+                ProcessingPositionChanged?.Invoke(currentTime);
             });
             if (HasBeenKilled()) return;
+            if (!succeeded)
+                VideoCropper.App.Diagnostics.Report("FFmpeg crop failed", $"Input: {fileName}; output: {outputFile}; see session log for command and exit code");
             AllDone();
         }
 
