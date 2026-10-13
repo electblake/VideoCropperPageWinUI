@@ -9,10 +9,12 @@ namespace VideoCropperPage
     public class CropProcessor(string ffmpegPath): Processor(ffmpegPath, VideoCropper.App.Diagnostics)
     {
         public event Action<TimeSpan>? ProcessingPositionChanged;
+        public bool Succeeded { get; private set; }
 
         public async Task Crop(string fileName, string ffmpegPath, string x, string y, string width, string height,
             bool normalizePixelAspectRatio, int quarterTurns, TimeSpan inPosition, TimeSpan outPosition)
         {
+            Succeeded = false;
             var range = new CropTimeRange(inPosition, outPosition);
             ProcessingPositionChanged?.Invoke(range.In);
             progressPrimary.Report(0);
@@ -42,6 +44,7 @@ namespace VideoCropperPage
                 ProcessingPositionChanged?.Invoke(range.SourcePosition(currentTime));
             });
             if (HasBeenKilled()) return;
+            Succeeded = succeeded;
             if (!succeeded)
                 VideoCropper.App.Diagnostics.Report("FFmpeg crop failed", $"Input: {fileName}; output: {outputFile}; see session log for command and exit code");
             AllDone();

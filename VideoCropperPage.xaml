@@ -152,6 +152,8 @@
                 <TabViewItem Header="Settings" IsClosable="False">
                     <ScrollView Background="{StaticResource PanelBackgroundBrush}">
                         <StackPanel Spacing="10" Padding="0,10,0,0">
+                            <CheckBox x:Name="NotifyWhenDoneCheckBox" Content="Notify when crop completes" IsChecked="False"
+                                      ToolTipService.ToolTip="Send a Windows notification after each successful crop."/>
                             <CheckBox x:Name="PreviewWhileProcessingCheckBox" Content="Preview while processing" IsChecked="True"
                                       ToolTipService.ToolTip="Follow crop progress in the source video, at most twice per second."/>
                             <CheckBox x:Name="MouseWheelZoomCheckBox" Content="Use mouse scroll wheel to zoom"

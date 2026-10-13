@@ -51,6 +51,7 @@ namespace VideoCropper
         private const string XPercentSetting = "Crop.XPercent";
         private const string YPercentSetting = "Crop.YPercent";
         private const string PreviewWhileProcessingSetting = "Crop.PreviewWhileProcessing";
+        private const string NotifyWhenDoneSetting = "Crop.NotifyWhenDone";
         private readonly ProcessingPreviewPosition processingPreview = new();
         private readonly DispatcherTimer processingPreviewTimer = new() { Interval = TimeSpan.FromMilliseconds(500) };
         private bool pageActive;
@@ -105,6 +106,10 @@ namespace VideoCropper
             VideoPlayer.MediaPlayer.MediaFailed += (_, args) => App.Diagnostics.Report(
                 $"Media failure: {args.Error}; {args.ErrorMessage}", args.ExtendedErrorCode);
             var settings = VideoCropper.App.Settings;
+            if (settings.ContainsKey(NotifyWhenDoneSetting))
+                NotifyWhenDoneCheckBox.IsChecked = settings.Get<bool>(NotifyWhenDoneSetting);
+            NotifyWhenDoneCheckBox.Checked += (_, _) => App.Settings[NotifyWhenDoneSetting] = true;
+            NotifyWhenDoneCheckBox.Unchecked += (_, _) => App.Settings[NotifyWhenDoneSetting] = false;
             if (settings.ContainsKey("Crop.QuarterTurns"))
                 quarterTurns = settings.Get<int>("Crop.QuarterTurns");
             if (settings.ContainsKey("Crop.WidthPercent"))
@@ -713,6 +718,8 @@ namespace VideoCropper
             outputFile = null;
             outputFile = await ProcessManager.StartProcess(CropVideo());
             if (!pageActive || !viewModel.AfterOperation || outputFile == null) return;
+            if (NotifyWhenDoneCheckBox.IsChecked == true && cropProcessor.Succeeded)
+                App.NotifyCropCompleted(outputFile);
             if (AutoAdvanceCheckBox.IsChecked == true && currentVideoIndex < videoPaths.Count - 1)
             {
                 currentVideoIndex++;
