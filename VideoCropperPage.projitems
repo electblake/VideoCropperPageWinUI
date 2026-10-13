@@ -11,6 +11,7 @@
   <ItemGroup>
     <Compile Include="$(MSBuildThisFileDirectory)CropperModel.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)CropProcessor.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)CropTimeRange.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)VideoCropperPage.xaml.cs">
       <DependentUpon>VideoCropperPage.xaml</DependentUpon>
     </Compile>

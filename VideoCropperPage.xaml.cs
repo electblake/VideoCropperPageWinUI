@@ -778,7 +778,8 @@ namespace VideoCropper
             var width = $"iw*{(double.Parse(XDelta.Text) / videoWidth).ToString(CultureInfo.InvariantCulture)}";
             var height = $"ih*{(double.Parse(YDelta.Text) / videoHeight).ToString(CultureInfo.InvariantCulture)}";
             await cropProcessor.Crop(videoPath, ffmpegPath, x, y, width, height,
-                NormalizePixelAspectRatioCheckBox.IsChecked == true, quarterTurns);
+                NormalizePixelAspectRatioCheckBox.IsChecked == true, quarterTurns,
+                VideoControls.InPosition, VideoControls.OutPosition);
         }
 
         private void GoBack(object sender, RoutedEventArgs e)

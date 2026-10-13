@@ -11,8 +11,10 @@ namespace VideoCropperPage
         public event Action<TimeSpan>? ProcessingPositionChanged;
 
         public async Task Crop(string fileName, string ffmpegPath, string x, string y, string width, string height,
-            bool normalizePixelAspectRatio, int quarterTurns)
+            bool normalizePixelAspectRatio, int quarterTurns, TimeSpan inPosition, TimeSpan outPosition)
         {
+            var range = new CropTimeRange(inPosition, outPosition);
+            ProcessingPositionChanged?.Invoke(range.In);
             progressPrimary.Report(0);
             centerTextPrimary.Report("0.0 %");
             var cropParams = $"crop={width}:{height}:{x}:{y}";
@@ -32,10 +34,12 @@ namespace VideoCropperPage
                     cropParams = $"{hwDownArgs}{cropParams}{hwUpArgs}";
                     break;
             }
-            var succeeded = await StartFfmpegTranscodingProcessDefaultQuality([fileName], GetOutputName(fileName), $"-vf \"{cropParams}\"", (progress, currentTime, duration, _, fps, speed) =>
+            var succeeded = await StartFfmpegTranscodingProcessDefaultQuality([fileName], GetOutputName(fileName),
+                range.InputArguments, $"{range.OutputArguments} -vf \"{cropParams}\"", (_, currentTime, _, _, fps, speed) =>
             {
-                IncrementProgress(progress, fps, (duration - currentTime) / speed);
-                ProcessingPositionChanged?.Invoke(currentTime);
+                var elapsed = TimeSpan.FromTicks(Math.Clamp(currentTime.Ticks, 0, range.Duration.Ticks));
+                IncrementProgress(elapsed / range.Duration * ProgressMax, fps, (range.Duration - elapsed) / speed);
+                ProcessingPositionChanged?.Invoke(range.SourcePosition(currentTime));
             });
             if (HasBeenKilled()) return;
             if (!succeeded)
