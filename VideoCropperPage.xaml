@@ -42,6 +42,14 @@
                        Style="{StaticResource SubtitleTextBlockStyle}" TextTrimming="CharacterEllipsis"
                        TextWrapping="NoWrap" ToolTipService.ToolTip="{Binding Text, ElementName=VideoName}"/>
             <StackPanel x:Name="VideoNavigation" Grid.Column="2" Orientation="Horizontal" Spacing="8">
+                <Grid Width="16" VerticalAlignment="Center">
+                    <FontIcon x:Name="CropPendingIcon" Glyph="&#xE823;" FontSize="16"
+                              Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                              ToolTipService.ToolTip="Crop pending" AutomationProperties.Name="Crop pending"/>
+                    <FontIcon x:Name="CropDoneIcon" Glyph="&#xE73E;" FontSize="16" Visibility="Collapsed"
+                              Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                              ToolTipService.ToolTip="Crop done" AutomationProperties.Name="Crop done"/>
+                </Grid>
                 <TextBlock x:Name="VideoPosition" VerticalAlignment="Center"
                            ToolTipService.ToolTip="Current video / total videos"/>
                 <Button x:Name="PreviousVideoButton" Click="PreviousVideo" ToolTipService.ToolTip="Previous video">
@@ -156,11 +164,16 @@
                                       ToolTipService.ToolTip="Send a Windows notification after each successful crop."/>
                             <CheckBox x:Name="PreviewWhileProcessingCheckBox" Content="Preview while processing" IsChecked="True"
                                       ToolTipService.ToolTip="Follow crop progress in the source video, at most twice per second."/>
+                            <NumberBox x:Name="AutoRunDelayNumberBox" Header="Auto run delay (seconds)"
+                                       Value="6" Minimum="0" SmallChange="1" LargeChange="5" SpinButtonPlacementMode="Compact"/>
+                            <NumberBox x:Name="QuitDelayNumberBox" Header="Quit countdown (seconds)"
+                                       Value="30" Minimum="0" SmallChange="1" LargeChange="5" SpinButtonPlacementMode="Compact"/>
                             <CheckBox x:Name="MouseWheelZoomCheckBox" Content="Use mouse scroll wheel to zoom"
                                       Checked="MouseWheelZoomCheckBox_OnChanged" Unchecked="MouseWheelZoomCheckBox_OnChanged"/>
                             <CheckBox x:Name="NormalizePixelAspectRatioCheckBox" Content="Convert output to square pixels (SAR 1:1)"
                                       Checked="NormalizePixelAspectRatioCheckBox_OnChanged" Unchecked="NormalizePixelAspectRatioCheckBox_OnChanged"/>
-                            <controls:HardwareSelector x:Name="HardwareSelector"/>
+                            <controls:HardwareSelector x:Name="HardwareSelector"
+                                                       IsEnabled="{x:Bind viewModel.DuringOperation, Mode=OneWay, Converter={StaticResource BoolNegationConverter}}"/>
                         </StackPanel>
                     </ScrollView>
                 </TabViewItem>
@@ -181,6 +194,9 @@
                 </Button>
                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                     <CheckBox x:Name="AutoAdvanceCheckBox" Content="Load next"/>
+                    <CheckBox x:Name="AutoRunNextCheckBox" Content="Auto run next" IsChecked="False"
+                              IsEnabled="{Binding IsChecked, ElementName=AutoAdvanceCheckBox}"
+                              ToolTipService.ToolTip="After loading the next video, count down before cropping. Change the delay in Settings."/>
                     <CheckBox x:Name="QuitWhenDoneCheckBox" Content="Quit when done"/>
                 </StackPanel>
             </Grid>

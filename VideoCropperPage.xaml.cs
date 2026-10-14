@@ -52,10 +52,15 @@ namespace VideoCropper
         private const string YPercentSetting = "Crop.YPercent";
         private const string PreviewWhileProcessingSetting = "Crop.PreviewWhileProcessing";
         private const string NotifyWhenDoneSetting = "Crop.NotifyWhenDone";
+        private const string AutoRunDelaySetting = "Crop.AutoRunDelaySeconds";
+        private const string QuitDelaySetting = "Crop.QuitDelaySeconds";
         private readonly ProcessingPreviewPosition processingPreview = new();
         private readonly DispatcherTimer processingPreviewTimer = new() { Interval = TimeSpan.FromMilliseconds(500) };
         private bool pageActive;
         private ContentDialog? quitDialog;
+        private ContentDialog? autoRunDialog;
+        private bool autoRunPending;
+        private bool mediaOpened;
         private readonly ObservableCollection<AspectRatio> ratios = [];
         private const double IconMaxSize = 40;
         private string? outputFile;
@@ -64,6 +69,7 @@ namespace VideoCropper
         private string ffmpegPath = null!;
         private string videoPath => videoPaths[currentVideoIndex];
         private readonly List<string> videoPaths = [];
+        private readonly HashSet<string> completedVideoPaths = new(StringComparer.OrdinalIgnoreCase);
         private int currentVideoIndex;
         private readonly DispatcherTimer resizeTimer = new() { Interval = TimeSpan.FromMilliseconds(500) };
         private bool videoSizeChanged;
@@ -96,7 +102,9 @@ namespace VideoCropper
                 App.Diagnostics.Log($"Media opened: {player.PlaybackSession.NaturalVideoWidth}x{player.PlaybackSession.NaturalVideoHeight}; duration={player.PlaybackSession.NaturalDuration}");
                 DispatcherQueue.TryEnqueue(() =>
                 {
-                    if (!pageActive || VideoPlayer.ActualWidth == 0 || VideoPlayer.ActualHeight == 0) return;
+                    if (!pageActive) return;
+                    mediaOpened = true;
+                    if (VideoPlayer.ActualWidth == 0 || VideoPlayer.ActualHeight == 0) return;
                     UpdateVideoRotation();
                     InitializeCropFrame(quarterTurns % 2 == 0
                         ? new Size(VideoPlayer.ActualWidth, VideoPlayer.ActualHeight)
@@ -106,6 +114,12 @@ namespace VideoCropper
             VideoPlayer.MediaPlayer.MediaFailed += (_, args) => App.Diagnostics.Report(
                 $"Media failure: {args.Error}; {args.ErrorMessage}", args.ExtendedErrorCode);
             var settings = VideoCropper.App.Settings;
+            if (settings.ContainsKey(AutoRunDelaySetting))
+                AutoRunDelayNumberBox.Value = settings.Get<double>(AutoRunDelaySetting);
+            if (settings.ContainsKey(QuitDelaySetting))
+                QuitDelayNumberBox.Value = settings.Get<double>(QuitDelaySetting);
+            AutoRunDelayNumberBox.ValueChanged += (_, args) => App.Settings[AutoRunDelaySetting] = args.NewValue;
+            QuitDelayNumberBox.ValueChanged += (_, args) => App.Settings[QuitDelaySetting] = args.NewValue;
             NotifyWhenDoneCheckBox.IsEnabled = !AppStorage.NoProfile;
             if (AppStorage.NoProfile)
                 ToolTipService.SetToolTip(NotifyWhenDoneCheckBox, "Windows notifications are disabled in -NoProfile mode.");
@@ -128,6 +142,10 @@ namespace VideoCropper
                 AutoAdvanceCheckBox.IsChecked = settings.Get<bool>("Crop.AutoAdvance");
             AutoAdvanceCheckBox.Checked += (_, _) => App.Settings["Crop.AutoAdvance"] = true;
             AutoAdvanceCheckBox.Unchecked += (_, _) => App.Settings["Crop.AutoAdvance"] = false;
+            if (settings.ContainsKey("Crop.AutoRunNext"))
+                AutoRunNextCheckBox.IsChecked = settings.Get<bool>("Crop.AutoRunNext");
+            AutoRunNextCheckBox.Checked += (_, _) => App.Settings["Crop.AutoRunNext"] = true;
+            AutoRunNextCheckBox.Unchecked += (_, _) => App.Settings["Crop.AutoRunNext"] = false;
             if (settings.ContainsKey("Crop.QuitWhenDone"))
                 QuitWhenDoneCheckBox.IsChecked = settings.Get<bool>("Crop.QuitWhenDone");
             QuitWhenDoneCheckBox.Checked += (_, _) => App.Settings["Crop.QuitWhenDone"] = true;
@@ -183,6 +201,8 @@ namespace VideoCropper
             resizeTimer.Stop();
             videoSizeChanged = false;
             quitDialog?.Hide();
+            autoRunPending = false;
+            autoRunDialog?.Hide();
             processingPreviewTimer.Stop();
             cropProcessor.ProcessingPositionChanged -= processingPreview.Report;
             VideoPlayer.MediaPlayer.PlaybackSession.SeekCompleted -= PreviewSeekCompleted;
@@ -220,8 +240,10 @@ namespace VideoCropper
             processingPreview.CompleteSeek();
         }
 
-        private void LoadVideo()
+        private void LoadVideo(bool autoRun = false)
         {
+            autoRunPending = autoRun;
+            mediaOpened = false;
             resizeTimer.Stop();
             videoSizeChanged = false;
             processingPreview.Reset();
@@ -239,7 +261,9 @@ namespace VideoCropper
         {
             RotateLeftButton.IsEnabled = RotateRightButton.IsEnabled = ResetRotationButton.IsEnabled = cropFrameInitialized && !viewModel.DuringOperation;
             VideoPosition.Text = $"{currentVideoIndex + 1}/{videoPaths.Count}";
-            VideoNavigation.Visibility = videoPaths.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+            var cropDone = videoPaths.Count > 0 && completedVideoPaths.Contains(videoPath);
+            CropPendingIcon.Visibility = cropDone ? Visibility.Collapsed : Visibility.Visible;
+            CropDoneIcon.Visibility = cropDone ? Visibility.Visible : Visibility.Collapsed;
             PreviousVideoButton.IsEnabled = !viewModel.DuringOperation && currentVideoIndex > 0;
             NextVideoButton.IsEnabled = !viewModel.DuringOperation && currentVideoIndex < videoPaths.Count - 1;
         }
@@ -494,6 +518,11 @@ namespace VideoCropper
             RotateLeftButton.IsEnabled = RotateRightButton.IsEnabled = ResetRotationButton.IsEnabled = !viewModel.DuringOperation;
             if (zoomIntoFrame) FocusCropFrame();
             else FitToView();
+            if (mediaOpened && autoRunPending)
+            {
+                autoRunPending = false;
+                ConfirmAutoRunNext();
+            }
         }
 
         private void FocusCropFrame()
@@ -715,30 +744,86 @@ namespace VideoCropper
 
         private async void Crop(object sender, RoutedEventArgs e)
         {
+            autoRunPending = false;
+            await RunCrop();
+        }
+
+        private async Task RunCrop()
+        {
             ApplyPendingResize();
             processingPreview.Reset();
             App.Diagnostics.Log($"Crop requested: input={videoPath}; X={X.Text}; Y={Y.Text}; width={XDelta.Text}; height={YDelta.Text}");
             outputFile = null;
-            outputFile = await ProcessManager.StartProcess(CropVideo());
-            if (!pageActive || !viewModel.AfterOperation || outputFile == null || cropProcessor.StopRequested) return;
+            completedVideoPaths.Remove(videoPath);
+            UpdateVideoNavigation();
+            outputFile = await ProcessManager.StartProcess(CropVideo);
+            if (!pageActive || !viewModel.AfterOperation || outputFile == null || cropProcessor.StopRequested || !cropProcessor.Succeeded) return;
+            completedVideoPaths.Add(videoPath);
+            UpdateVideoNavigation();
             if (NotifyWhenDoneCheckBox.IsChecked == true && cropProcessor.Succeeded)
                 App.NotifyCropCompleted(outputFile);
             if (AutoAdvanceCheckBox.IsChecked == true && currentVideoIndex < videoPaths.Count - 1)
             {
                 currentVideoIndex++;
-                LoadVideo();
+                LoadVideo(AutoRunNextCheckBox.IsChecked == true && cropProcessor.Succeeded);
             }
             else if (QuitWhenDoneCheckBox.IsChecked == true)
                 await ConfirmQuitWhenDone();
         }
 
+        private async void ConfirmAutoRunNext()
+        {
+            if (AutoAdvanceCheckBox.IsChecked != true || AutoRunNextCheckBox.IsChecked != true) return;
+            var delay = TimeSpan.FromSeconds(AutoRunDelayNumberBox.Value);
+            var dialog = new ContentDialog
+            {
+                XamlRoot = XamlRoot,
+                Title = "Auto run next",
+                Content = $"The next video is ready. Cropping in {Math.Ceiling(delay.TotalSeconds)} seconds.",
+                PrimaryButtonText = "Continue",
+                CloseButtonText = "Stop",
+                DefaultButton = ContentDialogButton.Close
+            };
+            autoRunDialog = dialog;
+            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+            var elapsed = new Stopwatch();
+            var expired = false;
+            timer.Tick += (_, _) =>
+            {
+                var seconds = Math.Max(0, Math.Ceiling((delay - elapsed.Elapsed).TotalSeconds));
+                dialog.Content = $"The next video is ready. Cropping in {seconds} seconds.";
+                if (seconds == 0)
+                {
+                    expired = true;
+                    timer.Stop();
+                    dialog.Hide();
+                }
+            };
+            dialog.Opened += (_, _) =>
+            {
+                elapsed.Start();
+                timer.Start();
+            };
+            dialog.Closing += (_, _) => timer.Stop();
+            var result = await dialog.ShowAsync();
+            autoRunDialog = null;
+            if (!pageActive) return;
+            if (!expired && result != ContentDialogResult.Primary)
+            {
+                AutoRunNextCheckBox.IsChecked = false;
+                return;
+            }
+            await RunCrop();
+        }
+
         private async Task ConfirmQuitWhenDone()
         {
+            var delay = TimeSpan.FromSeconds(QuitDelayNumberBox.Value);
             var dialog = new ContentDialog
             {
                 XamlRoot = XamlRoot,
                 Title = "Video Cropper is quitting",
-                Content = "Processing is complete. Quitting in 30 seconds.",
+                Content = $"Processing is complete. Quitting in {Math.Ceiling(delay.TotalSeconds)} seconds.",
                 PrimaryButtonText = "Quit now",
                 CloseButtonText = "Cancel",
                 DefaultButton = ContentDialogButton.Close
@@ -749,7 +834,7 @@ namespace VideoCropper
             var expired = false;
             timer.Tick += (_, _) =>
             {
-                var seconds = Math.Max(0, 30 - (int)elapsed.Elapsed.TotalSeconds);
+                var seconds = Math.Max(0, Math.Ceiling((delay - elapsed.Elapsed).TotalSeconds));
                 dialog.Content = $"Processing is complete. Quitting in {seconds} seconds.";
                 if (seconds == 0)
                 {

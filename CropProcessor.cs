@@ -49,7 +49,10 @@ namespace VideoCropperPage
             if (HasBeenKilled()) return;
             Succeeded = succeeded;
             if (!succeeded)
+            {
                 VideoCropper.App.Diagnostics.Report("FFmpeg crop failed", $"Input: {fileName}; output: {outputFile}; see session log for command and exit code");
+                error("FFmpeg crop failed. See the session log for the command and encoder error.");
+            }
             if (!StopRequested && succeeded) AllDone();
         }
 
