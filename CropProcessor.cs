@@ -50,8 +50,9 @@ namespace VideoCropperPage
             Succeeded = succeeded;
             if (!succeeded)
             {
-                VideoCropper.App.Diagnostics.Report("FFmpeg crop failed", $"Input: {fileName}; output: {outputFile}; see session log for command and exit code");
-                error("FFmpeg crop failed. See the session log for the command and encoder error.");
+                error(MemoryExhausted
+                    ? $"The crop stopped because the encoder could not allocate memory. Your current video and crop settings are unchanged. Free memory before clicking Crop again. The output is incomplete.\n\n{LastFailureDetails}"
+                    : $"FFmpeg crop failed. The output is incomplete.\n\n{LastFailureDetails}");
             }
             if (!StopRequested && succeeded) AllDone();
         }
